@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Printer, Trash2, Star, Battery, Signal } from 'lucide-react';
+import { Printer, Trash2, Star, Battery, Signal, Camera } from 'lucide-react';
 import { MessageRequest } from '../types';
 
 interface RetroDeviceProps {
@@ -11,14 +11,41 @@ interface RetroDeviceProps {
 export const RetroDevice: React.FC<RetroDeviceProps> = ({ onPrint, isPrinting }) => {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(true); 
+  const [hasReminder, setHasReminder] = useState(false);
+  
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const handlePrint = async () => {
     if (!input.trim() || isPrinting) return;
-    await onPrint({ content: input });
+    
+    await onPrint({ 
+      type: 'text',
+      content: input,
+      hasReminder: hasReminder 
+    });
+    
     setInput('');
-    // Keep focus after print
+    setHasReminder(false);
     inputRef.current?.focus();
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isPrinting) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      await onPrint({
+        type: 'image',
+        imageUrl: base64,
+        content: 'Photo', // Fallback content
+        hasReminder: false
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // Reset input
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -31,10 +58,14 @@ export const RetroDevice: React.FC<RetroDeviceProps> = ({ onPrint, isPrinting })
   return (
     <div className="relative z-10 w-full max-w-md mx-auto">
       
-      {/* Right Output Slot (Visual Anchor for Animation) */}
-      <div className="absolute top-1/2 -right-8 -translate-y-1/2 w-10 h-32 bg-[#1a1c1a] rounded-r-lg border-l-4 border-[#111] shadow-xl z-0 flex items-center justify-center">
-         <div className="w-1 h-24 bg-black/50 rounded-full"></div>
-      </div>
+      {/* Hidden File Input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleImageUpload} 
+        accept="image/*" 
+        className="hidden" 
+      />
 
       {/* Main Body */}
       <div className="relative bg-[#7DBD43] p-6 rounded-[3rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] border-b-8 border-[#5da32b] z-10">
@@ -60,17 +91,13 @@ export const RetroDevice: React.FC<RetroDeviceProps> = ({ onPrint, isPrinting })
         >
           <div className="flex items-center text-[#355e1b] text-[10px] mb-2 font-mono">
              <span className="mr-2">📁 COMPOSE_MODE</span>
+             {hasReminder && <span className="text-yellow-400 font-bold animate-pulse mr-2">[REMINDER]</span>}
              <div className="flex-1 h-px bg-[#355e1b] opacity-30"></div>
           </div>
 
           <div className="relative h-32 w-full font-mono text-xl text-[#4ade80] leading-relaxed">
             <span className="absolute left-0 top-0 text-[#4ade80] opacity-50 select-none">{'>'}</span>
             
-            {/* 
-               Optimized Input Strategy:
-               1. A transparent textarea on top captures input and focus.
-               2. A div underneath renders the text + cursor for perfect alignment.
-            */}
             <textarea
               ref={inputRef}
               value={input}
@@ -87,7 +114,6 @@ export const RetroDevice: React.FC<RetroDeviceProps> = ({ onPrint, isPrinting })
             {/* Visual Render Layer */}
             <div className="pl-6 w-full h-full whitespace-pre-wrap break-words pointer-events-none">
               {input}
-              {/* The Cursor - Appended directly to text flow */}
               {!isPrinting && isFocused && (
                 <motion.span
                   animate={{ opacity: [1, 0, 1] }}
@@ -118,20 +144,36 @@ export const RetroDevice: React.FC<RetroDeviceProps> = ({ onPrint, isPrinting })
         {/* Controls */}
         <div className="mt-8 flex items-center justify-between px-2">
           <div className="flex gap-4">
-            <button className="w-12 h-12 rounded-full bg-[#2a2d2a] shadow-[inset_0_-2px_4px_rgba(255,255,255,0.1),0_4px_4px_rgba(0,0,0,0.3)] flex items-center justify-center text-gray-500 hover:text-[#4ade80] transition-colors active:translate-y-0.5">
-              <Star size={20} />
+            {/* Reminder Button */}
+            <button 
+              onClick={() => setHasReminder(!hasReminder)}
+              className={`w-12 h-12 rounded-full shadow-[inset_0_-2px_4px_rgba(255,255,255,0.1),0_4px_4px_rgba(0,0,0,0.3)] flex items-center justify-center transition-all active:translate-y-0.5 ${
+                hasReminder 
+                  ? 'bg-[#3a3d3a] text-yellow-400 ring-2 ring-yellow-400/30' 
+                  : 'bg-[#2a2d2a] text-gray-500 hover:text-[#4ade80]'
+              }`}
+              title="Toggle Reminder"
+            >
+              <Star size={20} fill={hasReminder ? "currentColor" : "none"} />
             </button>
+            
+            {/* Camera Button */}
+             <button 
+               onClick={() => fileInputRef.current?.click()}
+               disabled={isPrinting}
+               className="w-12 h-12 rounded-full bg-[#2a2d2a] shadow-[inset_0_-2px_4px_rgba(255,255,255,0.1),0_4px_4px_rgba(0,0,0,0.3)] flex items-center justify-center text-gray-500 hover:text-blue-400 transition-colors active:translate-y-0.5"
+               title="Upload Photo"
+             >
+              <Camera size={20} />
+            </button>
+
              <button 
                onClick={() => { setInput(''); inputRef.current?.focus(); }}
-               className="w-12 h-12 rounded-full bg-[#2a2d2a] shadow-[inset_0_-2px_4px_rgba(255,255,255,0.1),0_4px_4px_rgba(0,0,0,0.3)] flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors active:translate-y-0.5">
+               className="w-12 h-12 rounded-full bg-[#2a2d2a] shadow-[inset_0_-2px_4px_rgba(255,255,255,0.1),0_4px_4px_rgba(0,0,0,0.3)] flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors active:translate-y-0.5"
+               title="Clear"
+             >
               <Trash2 size={20} />
             </button>
-          </div>
-
-          <div className="flex flex-col gap-1.5 opacity-20">
-            <div className="w-16 h-1 bg-black rounded-full"></div>
-            <div className="w-16 h-1 bg-black rounded-full"></div>
-            <div className="w-16 h-1 bg-black rounded-full"></div>
           </div>
 
           <motion.button
